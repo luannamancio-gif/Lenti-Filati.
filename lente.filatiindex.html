@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trova Colore</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 1rem;
+        }
+        .container {
+            width: 100%;
+            max-width: 42rem;
+            background-color: white;
+            padding: 2rem;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 5px 10px -5px rgba(0, 0, 0, 0.04);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 75%; /* 4:3 Aspect Ratio */
+            border-radius: 1rem;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #video-feed {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #color-selector {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 0 0 2px black;
+        }
+        .result-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .color-display-group {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .color-display {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid #e5e7eb;
+        }
+        .code-text {
+            font-weight: 600;
+            font-size: 1.125rem;
+            color: #374151;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-4">
+    <div class="container mx-auto">
+        <h1 class="text-3xl font-bold text-center text-gray-800">Trova il Colore</h1>
+        <p class="text-center text-gray-500">Inquadra l'oggetto con la fotocamera per trovare la corrispondenza più vicina.</p>
+        
+        <div class="video-container">
+            <video id="video-feed" autoplay playsinline></video>
+            <div id="color-selector"></div>
+        </div>
+
+        <div id="results" class="bg-gray-50 p-6 rounded-xl">
+            <div class="result-container" id="closest-colors">
+                <!-- I risultati verranno visualizzati qui -->
+            </div>
+        </div>
+    </div>
+    
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video-feed');
+        const colorSelector = document.getElementById('color-selector');
+        const resultsContainer = document.getElementById('closest-colors');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const threadColors = [
+            { code: "3871", hex: "#6d4c38" }, { code: "895", hex: "#9d7c67" }, { code: "435", hex: "#637573" },
+            { code: "68", hex: "#262423" }, { code: "643", hex: "#5b4c46" }, { code: "843", hex: "#5c544e" },
+            { code: "155", hex: "#495a62" }, { code: "589", hex: "#6b7a8a" }, { code: "593", hex: "#7c889a" },
+            { code: "112", hex: "#6d8196" }, { code: "8", hex: "#444d57" }, { code: "658", hex: "#37414d" },
+            { code: "837", hex: "#595d5a" }, { code: "840", hex: "#4a4d4a" }, { code: "642", hex: "#383b38" },
+            { code: "603", hex: "#2b2d2b" }, { code: "318", hex: "#7d6d5a" }, { code: "71", hex: "#777169" },
+            { code: "221", hex: "#566453" }, { code: "165", hex: "#637361" }, { code: "13", hex: "#697a6e" },
+            { code: "78", hex: "#877c68" }, { code: "118", hex: "#948a78" }, { code: "854", hex: "#958d7d" },
+            { code: "230", hex: "#9f8572" }, { code: "80", hex: "#836d55" }, { code: "339", hex: "#745d4a" },
+            { code: "38", hex: "#97826f" }, { code: "132", hex: "#9a8b75" }, { code: "633", hex: "#635349" },
+            { code: "215", hex: "#674d39" }, { code: "474", hex: "#59402f" }, { code: "665", hex: "#49372a" },
+            { code: "276", hex: "#5d4734" }, { code: "132", hex: "#4e3f32" }, { code: "633", hex: "#51453a" },
+            { code: "423", hex: "#696459" }, { code: "52", hex: "#746e63" }, { code: "36", hex: "#7e796e" },
+            { code: "193", hex: "#6e6a64" }, { code: "633", hex: "#5a544b" }, { code: "711", hex: "#5a544b" },
+            { code: "540", hex: "#5c5b57" }, { code: "474", hex: "#6c6b65" }, { code: "11", hex: "#7a7a78" },
+            { code: "194", hex: "#8b8a86" }, { code: "261", hex: "#7e7e7a" }, { code: "214", hex: "#6f706d" },
+            { code: "446", hex: "#545452" }, { code: "730", hex: "#5a5a58" }, { code: "310", hex: "#6e6e6d" },
+            { code: "195", hex: "#7e7e7d" }, { code: "634", hex: "#777777" }, { code: "40", hex: "#848382" },
+            { code: "694", hex: "#565654" }, { code: "226", hex: "#686766" }, { code: "309", hex: "#6b6b69" },
+            { code: "196", hex: "#6d6d6c" }, { code: "40", hex: "#797978" }, { code: "215", hex: "#777775" },
+            { code: "23", hex: "#413c3b" }, { code: "368", hex: "#44403f" }, { code: "232", hex: "#4c4948" },
+            { code: "278", hex: "#565251" }, { code: "493", hex: "#635c5c" }, { code: "610", hex: "#5b5453" },
+            { code: "696", hex: "#433c38" }, { code: "375", hex: "#4d4642" }, { code: "316", hex: "#554f4b" },
+            { code: "143", hex: "#5c5652" }, { code: "701", hex: "#5e5a56" }, { code: "6", hex: "#48403d" },
+            { code: "697", hex: "#393532" }, { code: "108", hex: "#413b38" }, { code: "214", hex: "#443f3c" },
+            { code: "965", hex: "#46403d" }, { code: "496", hex: "#4f4844" }, { code: "893", hex: "#514946" },
+            { code: "682", hex: "#413936" }, { code: "130", hex: "#4b4340" }, { code: "312", hex: "#514946" },
+            { code: "386", hex: "#4a423f" }, { code: "497", hex: "#413a37" }, { code: "578", hex: "#211e1c" },
+            { code: "769", hex: "#161413" }, { code: "369", hex: "#161312" }, { code: "959", hex: "#151312" },
+            { code: "322", hex: "#141211" }, { code: "93", hex: "#151312" }, { code: "580", hex: "#23201d" },
+            { code: "671", hex: "#272421" }, { code: "910", hex: "#221f1d" }, { code: "315", hex: "#211e1c" },
+            { code: "903", hex: "#201d1c" }, { code: "542", hex: "#211f1d" }, { code: "852", hex: "#24211e" },
+            { code: "480", hex: "#2a2724" }, { code: "384", hex: "#262321" }, { code: "311", hex: "#201d1c" },
+            { code: "25", hex: "#24211f" }, { code: "36", hex: "#23201e" }, { code: "106", hex: "#2c2926" },
+            { code: "727", hex: "#2f2b28" }, { code: "367", hex: "#34312e" }, { code: "74", hex: "#3a3734" },
+            { code: "761", hex: "#3c3937" }, { code: "190", hex: "#3d3a37" }, { code: "417", hex: "#3d3936" },
+            { code: "669", hex: "#3f3b38" }, { code: "46", hex: "#3c3937" }, { code: "759", hex: "#433f3d" },
+            { code: "946", hex: "#44413f" }, { code: "702", hex: "#44413e" }, { code: "416", hex: "#413d3b" },
+            { code: "439", hex: "#45413f" }, { code: "26", hex: "#45413f" }, { code: "86", hex: "#464240" },
+            { code: "736", hex: "#454140" }, { code: "35", hex: "#4a4645" }, { code: "327", hex: "#433f3e" },
+            { code: "199", hex: "#464240" }, { code: "365", hex: "#494544" }, { code: "810", hex: "#4e4a49" },
+            { code: "28", hex: "#524e4d" }, { code: "635", hex: "#514e4d" }, { code: "415", hex: "#454140" },
+            { code: "724", hex: "#474341" }, { code: "156", hex: "#4a4645" }, { code: "463", hex: "#504d4c" },
+            { code: "192", hex: "#545150" }, { code: "676", hex: "#53504f" }, { code: "886", hex: "#5a514d" },
+            { code: "241", hex: "#59504c" }, { code: "364", hex: "#5f5652" }, { code: "392", hex: "#635a57" },
+            { code: "331", hex: "#655e5b" }, { code: "531", hex: "#66605d" }, { code: "968", hex: "#6d625c" },
+            { code: "131", hex: "#6c615b" }, { code: "519", hex: "#726760" }, { code: "391", hex: "#736861" },
+            { code: "297", hex: "#756b63" }, { code: "269", hex: "#746b64" }, { code: "412", hex: "#766c64" },
+            { code: "299", hex: "#7a7068" }, { code: "82", hex: "#7c726a" }, { code: "291", hex: "#837971" },
+            { code: "235", hex: "#857b73" }, { code: "824", hex: "#847a72" }, { code: "362", hex: "#7a736c" },
+            { code: "722", hex: "#7e7770" }, { code: "909", hex: "#857e77" }, { code: "158", hex: "#8b847e" },
+            { code: "189", hex: "#8f8882" }, { code: "8", hex: "#89827b" }, { code: "350", hex: "#817b75" },
+            { code: "170", hex: "#858079" }, { code: "382", hex: "#89847d" }, { code: "442", hex: "#908a83" },
+            { code: "223", hex: "#928c86" }, { code: "264", hex: "#918b85" }, { code: "300", hex: "#867b72" },
+            { code: "5", hex: "#8b7f75" }, { code: "728", hex: "#8c8076" }, { code: "128", hex: "#92877c" },
+            { code: "870", hex: "#968b81" }, { code: "503", hex: "#978c82" }, { code: "979", hex: "#8b8277" },
+            { code: "169", hex: "#8e857b" }, { code: "890", hex: "#93897f" }, { code: "32", hex: "#948a80" },
+            { code: "18", hex: "#958b81" }, { code: "258", hex: "#938981" }, { code: "612", hex: "#7d6b5e" },
+            { code: "421", hex: "#7e6d60" }, { code: "660", hex: "#827164" }, { code: "324", hex: "#867468" },
+            { code: "914", hex: "#8b786c" }, { code: "432", hex: "#8e7b6f" }, { code: "285", hex: "#776c62" },
+            { code: "121", hex: "#7b7066" }, { code: "758", hex: "#81756b" }, { code: "575", hex: "#83776d" },
+            { code: "821", hex: "#877b71" }, { code: "861", hex: "#897d73" }, { code: "351", hex: "#71675f" },
+            { code: "198", hex: "#746a62" }, { code: "889", hex: "#7a7068" }, { code: "512", hex: "#81776f" },
+            { code: "561", hex: "#837971" }, { code: "304", hex: "#867c74" }, { code: "982", hex: "#635951" },
+            { code: "215", hex: "#665c54" }, { code: "663", hex: "#6a6058" }, { code: "257", hex: "#6c625b" },
+            { code: "472", hex: "#70665f" }, { code: "585", hex: "#6d635c" }, { code: "32", hex: "#605851" },
+            { code: "464", hex: "#645b54" }, { code: "372", hex: "#675f58" }, { code: "718", hex: "#6b635c" },
+            { code: "340", hex: "#6d655e" }, { code: "283", hex: "#68605a" }, { code: "48", hex: "#685e57" },
+            { code: "868", hex: "#6a615a" }, { code: "659", hex: "#6d645d" }, { code: "373", hex: "#6f665f" },
+            { code: "237", hex: "#726962" }, { code: "616", hex: "#6f665f" }, { code: "47", hex: "#584f48" },
+            { code: "160", hex: "#5b524b" }, { code: "320", hex: "#5e554e" }, { code: "571", hex: "#615851" },
+            { code: "167", hex: "#635a53" }, { code: "334", hex: "#655c55" }, { code: "50", hex: "#483f38" },
+            { code: "263", hex: "#4b423b" }, { code: "662", hex: "#4e453e" }, { code: "129", hex: "#514841" },
+            { code: "402", hex: "#554c45" }, { code: "582", hex: "#544b44" }, { code: "06", hex: "#3b322e" },
+            { code: "158", hex: "#3d3430" }, { code: "568", hex: "#413834" }, { code: "259", hex: "#443b37" },
+            { code: "239", hex: "#473e3a" }, { code: "282", hex: "#473e3a" }, { code: "24", hex: "#322c2a" },
+            { code: "591", hex: "#342e2c" }, { code: "441", hex: "#36302e" }, { code: "617", hex: "#3a3432" },
+            { code: "401", hex: "#3d3735" }, { code: "818", hex: "#3c3634" }, { code: "49", hex: "#262322" },
+            { code: "268", hex: "#292625" }, { code: "714", hex: "#2c2928" }, { code: "87", hex: "#2e2b2a" },
+            { code: "831", hex: "#302d2c" }, { code: "292", hex: "#302d2c" }, { code: "39", hex: "#201d1d" },
+            { code: "887", hex: "#211e1e" }, { code: "211", hex: "#232020" }, { code: "877", hex: "#242121" },
+            { code: "396", hex: "#252222" }, { code: "294", hex: "#252222" }, { code: "67", hex: "#252221" },
+            { code: "209", hex: "#272423" }, { code: "821", hex: "#292625" }, { code: "733", hex: "#2b2827" },
+            { code: "163", hex: "#2e2b2a" }, { code: "336", hex: "#2e2b2a" }
+        ];
+
+        // Funzione per la conversione da esadecimale a RGB
+        function hexToRgb(hex) {
+            const bigint = parseInt(hex.slice(1), 16);
+            const r = (bigint >> 16) & 255;
+            const g = (bigint >> 8) & 255;
+            const b = bigint & 255;
+            return { r, g, b };
+        }
+
+        // Funzione per calcolare la distanza tra due colori
+        function colorDistance(rgb1, rgb2) {
+            const dr = rgb1.r - rgb2.r;
+            const dg = rgb1.g - rgb2.g;
+            const db = rgb1.b - rgb2.b;
+            return Math.sqrt(dr * dr + dg * dg + db * db);
+        }
+
+        // Funzione per trovare i colori più vicini
+        function findClosestColors(targetRgb) {
+            const matches = threadColors.map(color => {
+                const threadRgb = hexToRgb(color.hex);
+                const distance = colorDistance(targetRgb, threadRgb);
+                return { code: color.code, distance: distance, hex: color.hex };
+            });
+            matches.sort((a, b) => a.distance - b.distance);
+            return matches.slice(0, 3);
+        }
+
+        // Funzione per disegnare i risultati
+        function drawResults(colors) {
+            resultsContainer.innerHTML = '';
+            colors.forEach(color => {
+                const div = document.createElement('div');
+                div.className = 'color-display-group';
+                div.innerHTML = `
+                    <div class="color-display" style="background-color: ${color.hex};"></div>
+                    <span class="code-text">Codice: ${color.code}</span>
+                `;
+                resultsContainer.appendChild(div);
+            });
+        }
+
+        // Funzione principale per l'accesso alla fotocamera
+        async function startCamera() {
+            try {
+                loadingOverlay.style.display = 'flex';
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = stream;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    loadingOverlay.style.display = 'none';
+                    // Inizia l'analisi del colore ogni 200 ms
+                    setInterval(() => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = video.videoWidth;
+                        canvas.height = video.videoHeight;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                        const x = canvas.width / 2;
+                        const y = canvas.height / 2;
+                        const pixel = ctx.getImageData(x, y, 1, 1).data;
+                        const rgb = { r: pixel[0], g: pixel[1], b: pixel[2] };
+                        
+                        colorSelector.style.backgroundColor = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+                        
+                        const closestMatches = findClosestColors(rgb);
+                        drawResults(closestMatches);
+
+                    }, 200);
+                };
+            } catch (err) {
+                console.error("Errore nell'accesso alla fotocamera: ", err);
+                loadingOverlay.style.display = 'none';
+                alert("Impossibile accedere alla fotocamera. Per favore, assicurati di aver concesso i permessi.");
+            }
+        }
+
+        // Avvia l'app al caricamento della finestra
+        window.onload = startCamera;
+
+        // Modal di avviso personalizzato per sostituire alert()
+        function alert(message) {
+            const modalHtml = `
+                <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+                    <div class="relative mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                        <div class="mt-3 text-center">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900">Errore</h3>
+                            <div class="mt-2 px-7 py-3">
+                                <p class="text-sm text-gray-500">${message}</p>
+                            </div>
+                            <div class="items-center px-4 py-3">
+                                <button id="alert-ok" class="px-4 py-2 bg-indigo-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    OK
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            const modalDiv = document.createElement('div');
+            modalDiv.innerHTML = modalHtml;
+            document.body.appendChild(modalDiv);
+
+            document.getElementById('alert-ok').onclick = () => {
+                document.body.removeChild(modalDiv);
+            };
+        }
+    </script>
+</body>
+</html>
